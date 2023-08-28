@@ -30,6 +30,7 @@ import {
   TypedMessageParams,
 } from '@metamask/message-manager';
 import { toChecksumHexAddress } from '@metamask/controller-utils';
+import { BaseKeyring, StoredKeyring } from '@keystonehq/base-eth-keyring';
 
 /**
  * Available keyring types
@@ -38,6 +39,49 @@ export enum KeyringTypes {
   simple = 'Simple Key Pair',
   hd = 'HD Key Tree',
   qr = 'QR Hardware Wallet Device',
+  nfc_simple = 'Simple NFC Hardware Wallet Device',
+  nfc_hd = 'HD NFC Hardware Wallet Device'
+}
+
+export class NFCKeyring {
+  static type: string = KeyringTypes.nfc_simple;
+  type: string = KeyringTypes.nfc_simple;
+  static instance: NFCKeyring;
+  name: string = KeyringTypes.nfc_simple;
+  address: string = '';
+
+  constructor(opts: Record<string, unknown> | undefined = {}) {
+    if (NFCKeyring.instance) {
+      NFCKeyring.instance.deserialize(opts);
+      return NFCKeyring.instance;
+    }
+    NFCKeyring.instance = this;
+  }
+
+
+  public getAccounts() {
+    return Promise.resolve([this.address]);
+  }
+
+  public addAccounts(n?: number): Promise<string[]> {
+    return Promise.resolve([this.address]);
+  }
+
+  serialize(): Promise<any> {
+    return Promise.resolve({
+      address: this.address,
+    });
+  }
+
+  deserialize(opts?: any): Promise<void> {
+    return new Promise<void>((resolve) => {
+      if (opts && opts.address) {
+        this.address = opts.address;
+      }
+      resolve();
+    });
+  }
+
 }
 
 /**
@@ -51,6 +95,7 @@ export enum KeyringTypes {
 export interface KeyringObject {
   type: string;
   accounts: string[];
+
   getAccounts(): string[];
 }
 
@@ -186,6 +231,10 @@ export class KeyringController extends BaseController<
     state?: Partial<KeyringState>,
   ) {
     super(config, state);
+    console.log(`Keyring state is: ${state?.name}`);
+    console.log(`Keyring state is: ${state?.vault}`);
+    console.log(`Keyring state is: ${state?.keyrings?.toString()}`);
+    console.log(`Keyring config is: ${config?.toString}`);
     this.#keyring = new Keyring(Object.assign({ initState: state }, config));
 
     this.defaultState = {
@@ -747,6 +796,50 @@ export class KeyringController extends BaseController<
     });
     await this.#keyring.persistAllKeyrings();
     await this.fullUpdate();
+  }
+
+  // NFC Hardware related methods
+
+  /**
+   * Get nfc hardware keyring.
+   *
+   * @returns The added keyring
+   */
+  async getOrAddNFCKeyring(address: string): Promise<NFCKeyring> {
+    const keyring = this.#keyring.getKeyringsByType(KeyringTypes.nfc_simple);
+    if (keyring[0]) {
+      return keyring[0];
+    } else return (await this.addNFCKeyring(address));
+  }
+
+  /**
+   * Add nfc hardware keyring.
+   *
+   * @returns The added keyring
+   * @throws If a NFCKeyring builder is not provided
+   * when initializing the controller
+   */
+  private async addNFCKeyring(address: string): Promise<NFCKeyring> {
+    const keyring = await this.#keyring.addNewKeyring(KeyringTypes.nfc_simple, { address: address });
+    await this.fullUpdate();
+    return keyring;
+  }
+
+  async addNFCHardwareWalletAccount(address: string): Promise<string | undefined> {
+    try {
+      const keyring = await this.getOrAddNFCKeyring(address);
+      await this.#keyring.addNewAccount(keyring);
+      if (this.setAccountLabel) {
+        this.setAccountLabel(address, `Hito wallet`);
+      }
+      this.updateIdentities(await this.#keyring.getAccounts());
+      this.setSelectedAddress(address);
+      await this.#keyring.persistAllKeyrings();
+      await this.fullUpdate();
+      return address;
+    } catch (err) {
+      console.error(`unlockNFCHardwareWalletAccount error: ${err}`);
+    }
   }
 }
 
