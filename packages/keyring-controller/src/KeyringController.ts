@@ -231,10 +231,6 @@ export class KeyringController extends BaseController<
     state?: Partial<KeyringState>,
   ) {
     super(config, state);
-    console.log(`Keyring state is: ${state?.name}`);
-    console.log(`Keyring state is: ${state?.vault}`);
-    console.log(`Keyring state is: ${state?.keyrings?.toString()}`);
-    console.log(`Keyring config is: ${config?.toString}`);
     this.#keyring = new Keyring(Object.assign({ initState: state }, config));
 
     this.defaultState = {
@@ -429,7 +425,7 @@ export class KeyringController extends BaseController<
 
         privateKey = stripHexPrefix(prefixed);
         break;
-      case 'json':
+       case 'json':
         let wallet;
         const [input, password] = args;
         try {
